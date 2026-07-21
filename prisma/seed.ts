@@ -13,6 +13,14 @@ import { parseVcfText } from "../server/vcf/parser";
 const prisma = new PrismaClient();
 
 async function main() {
+  // Idempotent: skip seeding if the database already has data. This makes it
+  // safe to run on every container start.
+  const existing = await prisma.dataset.count();
+  if (existing > 0) {
+    console.log(`Database already has ${existing} dataset(s); skipping seed.`);
+    return;
+  }
+
   const path = join(process.cwd(), "samples", "sample.vcf");
   const text = await readFile(path, "utf8");
   const variants = await parseVcfText(text);

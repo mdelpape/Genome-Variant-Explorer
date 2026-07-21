@@ -55,7 +55,53 @@ flowchart LR
 Ordering matters: **migrate before releasing** the new server so the running
 code never sees an older schema.
 
-## 5. Platform notes
+## 5. Docker
+
+The repository ships a multi-stage `Dockerfile` and a `docker-compose.yml` that
+runs the app and PostgreSQL together.
+
+```bash
+docker compose up --build      # http://localhost:3000
+```
+
+Flow on container start (`docker-entrypoint.sh`):
+
+1. Wait for the DB (compose `depends_on` + healthcheck).
+2. Apply schema — `prisma migrate deploy` if migrations exist, otherwise
+   `prisma db push`.
+3. Seed sample data when `SEED_ON_START=true` (idempotent — no-op if data
+   exists).
+4. `exec npm run start`.
+
+```mermaid
+flowchart LR
+    A[docker compose up] --> B[postgres:16<br/>healthcheck]
+    B -- healthy --> C[app container]
+    C --> D[entrypoint:<br/>migrate/push]
+    D --> E[optional seed]
+    E --> F[next start :3000]
+    D <-->|SQL| B
+```
+
+Image design:
+
+- Multi-stage: `deps` → `builder` (prisma generate + next build) → `runner`.
+- The runner keeps the full dependency set so the Prisma CLI (migrations) and
+  the tsx seed script run at start.
+- `openssl` is installed for the Prisma query engine; the Prisma client is
+  generated inside the image so the engine matches the container platform.
+
+Environment (set by compose, override as needed):
+
+| Variable        | Default (compose)                                    |
+| --------------- | ---------------------------------------------------- |
+| `DATABASE_URL`  | `postgresql://postgres:postgres@db:5432/genome_variant_explorer?schema=public` |
+| `SEED_ON_START` | `true`                                               |
+
+Persistence: the `pgdata` named volume holds the database. `docker compose down
+-v` wipes it.
+
+## 6. Platform notes
 
 ### Vercel
 
@@ -75,7 +121,7 @@ code never sees an older schema.
 - Run `prisma migrate deploy` as a release/pre-start step.
 - Health check: `GET /api/dashboard` returns 200 once the DB is reachable.
 
-## 6. Configuration already in the codebase
+## 7. Configuration already in the codebase
 
 - **Prisma singleton** (`lib/prisma.ts`) prevents connection exhaustion in dev
   and under serverless reuse.
@@ -83,7 +129,7 @@ code never sees an older schema.
   uploads.
 - **Upload route** pins the Node runtime and a 300s `maxDuration`.
 
-## 7. Post-deploy checklist
+## 8. Post-deploy checklist
 
 - [ ] `DATABASE_URL` set and reachable from the runtime.
 - [ ] `prisma migrate deploy` applied (tables + indexes present).
@@ -92,7 +138,7 @@ code never sees an older schema.
       dataset page with 15 variants.
 - [ ] (Optional) `npm run db:seed` for demo data in non-production.
 
-## 8. Scaling considerations
+## 9. Scaling considerations
 
 - **Database connections:** set `connection_limit` in `DATABASE_URL` or use a
   pooler; each server instance holds a pool.

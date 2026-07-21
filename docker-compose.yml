@@ -1,0 +1,40 @@
+# One-command local stack: `docker compose up --build`
+#
+# Brings up PostgreSQL and the Genome Variant Explorer. The app waits for the
+# database to be healthy, applies the schema, seeds sample data on first run,
+# then serves on http://localhost:3000.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: genome_variant_explorer
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d genome_variant_explorer"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/genome_variant_explorer?schema=public
+      # Load the bundled sample VCF on first start (skipped if data exists).
+      SEED_ON_START: "true"
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:

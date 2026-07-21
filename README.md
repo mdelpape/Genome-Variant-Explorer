@@ -167,6 +167,26 @@ npm run build && npm run start
 The application is deployable as-is once `DATABASE_URL` points at a PostgreSQL
 instance.
 
+### Run with Docker (one command)
+
+No local Node or PostgreSQL required — just Docker:
+
+```bash
+docker compose up --build
+```
+
+This starts PostgreSQL and the app together. On first start the app waits for
+the database, applies the schema, seeds the bundled `samples/sample.vcf`, and
+serves on **http://localhost:3000**. Data persists in the `pgdata` volume across
+restarts (seeding is idempotent, so it won't duplicate).
+
+```bash
+docker compose down       # stop
+docker compose down -v    # stop and wipe the database volume
+```
+
+Set `SEED_ON_START: "false"` in `docker-compose.yml` to skip sample data.
+
 ---
 
 ## Environment variables
