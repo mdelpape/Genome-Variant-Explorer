@@ -1,0 +1,61 @@
+// Prisma schema for the Genome Variant Explorer.
+//
+// Two entities model the domain:
+//   - Dataset: one uploaded VCF file.
+//   - Variant: one parsed record (row) belonging to a dataset.
+//
+// Indexes are placed on the columns researchers filter and sort by most
+// often (gene, chromosome, position) plus clinicalSignificance for the
+// classification facet on the variants table.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Behind a connection pooler (PgBouncer / Neon / Supabase), add a direct
+  // connection for migrations by uncommenting the next line and setting
+  // DIRECT_URL in your environment:
+  // directUrl = env("DIRECT_URL")
+}
+
+model Dataset {
+  id         String   @id @default(cuid())
+  filename   String
+  uploadDate DateTime @default(now())
+
+  variants Variant[]
+
+  @@index([uploadDate])
+  @@map("datasets")
+}
+
+model Variant {
+  id        String  @id @default(cuid())
+  datasetId String
+
+  chromosome String
+  position   Int
+  gene       String?
+  reference  String
+  alternate  String
+  quality    Float?
+  filter     String?
+
+  // Raw INFO column, stored verbatim so nothing is lost during parsing.
+  info String @default("")
+
+  // Extracted from CLNSIG / ANN when present. Nullable by design.
+  clinicalSignificance String?
+
+  dataset Dataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@index([datasetId])
+  @@index([gene])
+  @@index([chromosome])
+  @@index([position])
+  @@index([clinicalSignificance])
+  @@map("variants")
+}
